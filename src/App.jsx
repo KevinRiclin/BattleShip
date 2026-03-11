@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import ProfessionalBackground from '@/components/background'
 import CreateLobbyPage from '@/components/CreateLobbyPage'
 import JoinedLobbyPage from '@/components/JoinedLobbyPage'
+import ShipPlacementPage from '@/components/ShipPlacementPage'
 
 function App() {
   const [screen, setScreen] = useState('landing')
@@ -10,6 +11,8 @@ function App() {
   const [isJoiningLobby, setIsJoiningLobby] = useState(false)
   const [joinLobbyError, setJoinLobbyError] = useState('')
   const [joinedLobby, setJoinedLobby] = useState(null)
+  const [placementLobby, setPlacementLobby] = useState(null)
+  const [placementPlayerName, setPlacementPlayerName] = useState('')
   const [createPlayerName, setCreatePlayerName] = useState('')
   const [createLobbyName, setCreateLobbyName] = useState('')
   const canJoinLobby = joinPlayerName.trim().length >= 3 && joinLobbyCode.trim().length >= 3
@@ -21,6 +24,23 @@ function App() {
 
   const handleGoBack = () => {
     setScreen('landing')
+  }
+
+  const handleStartPlacement = (lobby) => {
+    setPlacementLobby(lobby)
+    setPlacementPlayerName(createPlayerName.trim())
+    setJoinedLobby(lobby)
+    setJoinLobbyCode(lobby.code)
+    setJoinLobbyError('')
+    setIsJoiningLobby(false)
+    setScreen('ship-placement')
+  }
+
+  const handleStartPlacementFromJoin = (lobby) => {
+    setJoinedLobby(lobby)
+    setPlacementLobby(lobby)
+    setPlacementPlayerName(joinPlayerName.trim())
+    setScreen('ship-placement')
   }
 
   const handleJoinLobby = async () => {
@@ -66,6 +86,17 @@ function App() {
         setCreatePlayerName={setCreatePlayerName}
         createLobbyName={createLobbyName}
         setCreateLobbyName={setCreateLobbyName}
+        onStartPlacement={handleStartPlacement}
+        onGoBack={handleGoBack}
+      />
+    )
+  }
+
+  if (screen === 'ship-placement' && placementLobby) {
+    return (
+      <ShipPlacementPage
+        lobby={placementLobby}
+        hostName={placementPlayerName || createPlayerName.trim() || joinPlayerName.trim()}
         onGoBack={handleGoBack}
       />
     )
@@ -77,6 +108,7 @@ function App() {
         lobby={joinedLobby}
         playerName={joinPlayerName.trim()}
         onGoBack={handleGoBack}
+        onStartPlacement={handleStartPlacementFromJoin}
       />
     )
   }

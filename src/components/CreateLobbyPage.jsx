@@ -6,6 +6,7 @@ function CreateLobbyPage({
   setCreatePlayerName,
   createLobbyName,
   setCreateLobbyName,
+  onStartPlacement,
   onGoBack,
 }) {
   const canCreateLobby = createPlayerName.trim().length >= 3 && createLobbyName.trim().length >= 3
@@ -89,13 +90,36 @@ function CreateLobbyPage({
   const lobbyPlayers = createdLobby?.players || []
   const canStartGame = Boolean(createdLobbyCode)
 
-  const handlePrimaryAction = () => {
+  const handlePrimaryAction = async () => {
     if (!createdLobbyCode) {
       handleCreateLobby()
       return
     }
 
-    setRequestError('Partie non demarree: etape suivante a brancher (placement des bateaux).')
+    if (!createdLobby || isCreating) {
+      return
+    }
+
+    setIsCreating(true)
+    setRequestError('')
+
+    try {
+      const response = await fetch(`/api/lobbies/${encodeURIComponent(createdLobbyCode)}/start`, {
+        method: 'POST',
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Impossible de demarrer la partie.')
+      }
+
+      setCreatedLobby(payload.lobby)
+      onStartPlacement(payload.lobby)
+    } catch (error) {
+      setRequestError(error.message || 'Impossible de demarrer la partie.')
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   return (
@@ -224,7 +248,13 @@ function CreateLobbyPage({
                         : 'bg-white disabled:cursor-not-allowed disabled:opacity-55'
                     }`}
                   >
-                    {isCreating ? 'Creation en cours...' : createdLobbyCode ? 'Demarrer la partie' : 'Creer et ouvrir le lobby'}
+                    {isCreating
+                      ? createdLobbyCode
+                        ? 'Demarrage...'
+                        : 'Creation en cours...'
+                      : createdLobbyCode
+                        ? 'Demarrer la partie'
+                        : 'Creer et ouvrir le lobby'}
                   </button>
                 </div>
               </div>

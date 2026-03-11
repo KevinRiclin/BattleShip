@@ -1,7 +1,54 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import ProfessionalBackground from '@/components/background'
 
-function JoinedLobbyPage({ lobby, playerName, onGoBack }) {
+function JoinedLobbyPage({ lobby, playerName, onGoBack, onStartPlacement }) {
+  const [liveLobby, setLiveLobby] = useState(lobby)
+  const [syncError, setSyncError] = useState('')
+
+  useEffect(() => {
+    setLiveLobby(lobby)
+  }, [lobby])
+
+  useEffect(() => {
+    if (!lobby?.code) {
+      return undefined
+    }
+
+    let isCancelled = false
+
+    const refreshLobby = async () => {
+      try {
+        const response = await fetch(`/api/lobbies/${encodeURIComponent(lobby.code)}`)
+        const payload = await response.json()
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Synchronisation du lobby impossible.')
+        }
+
+        if (!isCancelled) {
+          setLiveLobby(payload.lobby)
+          setSyncError('')
+
+          if (payload.lobby?.status === 'placing-ships') {
+            onStartPlacement(payload.lobby)
+          }
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setSyncError(error.message || 'Synchronisation du lobby impossible.')
+        }
+      }
+    }
+
+    refreshLobby()
+    const intervalId = setInterval(refreshLobby, 2000)
+
+    return () => {
+      isCancelled = true
+      clearInterval(intervalId)
+    }
+  }, [lobby?.code, onStartPlacement])
+
   return (
     <div className="min-h-screen bg-black">
       <ProfessionalBackground />
@@ -33,19 +80,23 @@ function JoinedLobbyPage({ lobby, playerName, onGoBack }) {
                 <div className="space-y-3 text-sm text-white/75">
                   <p>
                     <span className="text-white/50">Code:</span>{' '}
-                    <span className="font-mono text-cyan-200 tracking-wider">{lobby.code}</span>
+                    <span className="font-mono text-cyan-200 tracking-wider">{liveLobby.code}</span>
                   </p>
                   <p>
                     <span className="text-white/50">Lobby:</span>{' '}
-                    <span className="text-white">{lobby.lobbyName}</span>
+                    <span className="text-white">{liveLobby.lobbyName}</span>
                   </p>
                   <p>
                     <span className="text-white/50">Host:</span>{' '}
-                    <span className="text-white">{lobby.hostName}</span>
+                    <span className="text-white">{liveLobby.hostName}</span>
                   </p>
                   <p>
                     <span className="text-white/50">Toi:</span>{' '}
                     <span className="text-emerald-300">{playerName}</span>
+                  </p>
+                  <p>
+                    <span className="text-white/50">Joueurs:</span>{' '}
+                    <span className="text-white">{liveLobby.players.length}</span>
                   </p>
                 </div>
               </div>
@@ -53,7 +104,7 @@ function JoinedLobbyPage({ lobby, playerName, onGoBack }) {
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5 md:p-6">
                 <h2 className="mb-4 text-lg font-semibold text-white">Joueurs connectes</h2>
                 <ul className="space-y-2 text-sm text-white/80">
-                  {lobby.players.map((player) => (
+                  {liveLobby.players.map((player) => (
                     <li
                       key={player.name}
                       className="rounded-md border border-white/10 bg-black/30 px-3 py-2"
@@ -63,6 +114,11 @@ function JoinedLobbyPage({ lobby, playerName, onGoBack }) {
                     </li>
                   ))}
                 </ul>
+                {syncError ? (
+                  <p className="mt-3 rounded-lg border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+                    {syncError}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
