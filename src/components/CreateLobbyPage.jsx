@@ -214,7 +214,7 @@ function CreateLobbyPage({
                   </p>
                   <p>
                     <span className="text-white/50">Joueurs:</span>{' '}
-                    <span className="text-white">{lobbyPlayers.length || 0}</span>
+                    <span className="text-white">{lobbyPlayers.length || 0}/2</span>
                   </p>
                 </div>
 

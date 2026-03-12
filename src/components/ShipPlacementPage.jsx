@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import ProfessionalBackground from '@/components/background'
 
 const GRID_SIZE = 10
@@ -45,11 +45,65 @@ function canPlaceShip(candidateShip, shipsById) {
   })
 }
 
-function ShipPlacementPage({ lobby, hostName, onGoBack }) {
+function isPlayerReady(lobby, playerName) {
+  return (lobby?.readyPlayers || []).some((readyPlayer) => readyPlayer.toLowerCase() === playerName.toLowerCase())
+}
+
+function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
   const [orientation, setOrientation] = useState('horizontal')
   const [shipsById, setShipsById] = useState({})
   const [selectedShipId, setSelectedShipId] = useState(FLEET[0].id)
   const [placementError, setPlacementError] = useState('')
+  const [liveLobby, setLiveLobby] = useState(lobby)
+  const [syncError, setSyncError] = useState('')
+  const [isSubmittingReady, setIsSubmittingReady] = useState(false)
+  const [hasSubmittedReady, setHasSubmittedReady] = useState(isPlayerReady(lobby, playerName || ''))
+
+  useEffect(() => {
+    setLiveLobby(lobby)
+    setHasSubmittedReady(isPlayerReady(lobby, playerName || ''))
+  }, [lobby, playerName])
+
+  useEffect(() => {
+    if (!lobby?.code) {
+      return undefined
+    }
+
+    let isCancelled = false
+
+    const refreshLobby = async () => {
+      try {
+        const response = await fetch(`/api/lobbies/${encodeURIComponent(lobby.code)}`)
+        const payload = await response.json()
+
+        if (!response.ok) {
+          throw new Error(payload.error || 'Synchronisation du lobby impossible.')
+        }
+
+        if (!isCancelled) {
+          setLiveLobby(payload.lobby)
+          setSyncError('')
+          setHasSubmittedReady(isPlayerReady(payload.lobby, playerName || ''))
+
+          if (payload.lobby?.status === 'in-game') {
+            onGameStart(payload.lobby)
+          }
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setSyncError(error.message || 'Synchronisation du lobby impossible.')
+        }
+      }
+    }
+
+    refreshLobby()
+    const intervalId = setInterval(refreshLobby, 2000)
+
+    return () => {
+      isCancelled = true
+      clearInterval(intervalId)
+    }
+  }, [lobby?.code, onGameStart, playerName])
 
   const occupiedCellMap = useMemo(() => {
     const map = new Map()
@@ -64,6 +118,7 @@ function ShipPlacementPage({ lobby, hostName, onGoBack }) {
   }, [shipsById])
 
   const allShipsPlaced = Object.keys(shipsById).length === FLEET.length
+  const readyCount = liveLobby?.readyPlayers?.length || 0
 
   const selectedShip = FLEET.find((ship) => ship.id === selectedShipId)
 
@@ -105,13 +160,56 @@ function ShipPlacementPage({ lobby, hostName, onGoBack }) {
     setSelectedShipId(shipId)
   }
 
+  const handleConfirmPlacement = async () => {
+    if (!allShipsPlaced) {
+      setPlacementError('Tu dois placer tous les bateaux avant de valider.')
+      return
+    }
+
+    if (!lobby?.code || !playerName || isSubmittingReady || hasSubmittedReady) {
+      return
+    }
+
+    setIsSubmittingReady(true)
+    setPlacementError('')
+
+    try {
+      const response = await fetch(`/api/lobbies/${encodeURIComponent(lobby.code)}/ready`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          playerName,
+          ships: Object.values(shipsById),
+        }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.error || 'Validation du placement impossible.')
+      }
+
+      setLiveLobby(payload.lobby)
+      setHasSubmittedReady(true)
+
+      if (payload.allReady || payload.lobby?.status === 'in-game') {
+        onGameStart(payload.lobby)
+      }
+    } catch (error) {
+      setPlacementError(error.message || 'Validation du placement impossible.')
+    } finally {
+      setIsSubmittingReady(false)
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-black">
+    <div className="h-screen overflow-hidden bg-black">
       <ProfessionalBackground />
 
-      <div className="relative z-50 min-h-screen px-6 py-8 md:py-12">
-        <div className="mx-auto w-full max-w-6xl">
-          <div className="mb-6 flex items-center justify-between gap-4">
+      <div className="relative z-50 h-screen px-4 py-4 md:px-6 md:py-5">
+        <div className="mx-auto flex h-full w-full max-w-6xl flex-col">
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-4">
             <button
               type="button"
               onClick={onGoBack}
@@ -124,96 +222,103 @@ function ShipPlacementPage({ lobby, hostName, onGoBack }) {
             </span>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-black/60 p-5 shadow-2xl backdrop-blur-md md:p-8">
-            <h1 className="mb-2 text-3xl font-bold text-white md:text-4xl">Placement des bateaux</h1>
-            <p className="mb-6 text-sm text-white/65 md:text-base">
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-black/60 p-4 shadow-2xl backdrop-blur-md md:p-5">
+            <h1 className="mb-1 text-2xl font-bold text-white md:text-3xl">Placement des bateaux</h1>
+            <p className="mb-3 text-xs text-white/65 md:text-sm">
               Place tous tes bateaux avant de demarrer la partie. Clique une case pour poser le bateau selectionne.
             </p>
 
-            <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="mb-3 grid shrink-0 grid-cols-1 gap-3 md:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <p className="text-xs uppercase tracking-wide text-white/50">Lobby</p>
                 <p className="mt-1 font-mono tracking-wider text-cyan-200">{lobby?.code || '---- ----'}</p>
-                <p className="mt-2 text-sm text-white/75">Host: {hostName || 'Inconnu'}</p>
+                <p className="mt-1 text-xs text-white/75 md:text-sm">Joueur: {playerName || 'Inconnu'}</p>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <p className="text-xs uppercase tracking-wide text-white/50">Orientation</p>
                 <button
                   type="button"
                   onClick={() => setOrientation((value) => (value === 'horizontal' ? 'vertical' : 'horizontal'))}
-                  className="mt-2 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                  className="mt-2 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10 md:text-sm"
                 >
                   {orientation === 'horizontal' ? 'Horizontale' : 'Verticale'}
                 </button>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <p className="text-xs uppercase tracking-wide text-white/50">Progression</p>
-                <p className="mt-2 text-sm text-white/80">
+                <p className="mt-1 text-xs text-white/80 md:text-sm">
                   {Object.keys(shipsById).length}/{FLEET.length} bateaux places
                 </p>
+                <p className="mt-1 text-xs text-white/80 md:text-sm">Prets: {readyCount}/2</p>
                 <button
                   type="button"
-                  disabled={!allShipsPlaced}
-                  className={`mt-3 w-full rounded-lg px-3 py-2 text-sm font-semibold text-black transition ${
-                    allShipsPlaced
+                  onClick={handleConfirmPlacement}
+                  disabled={!allShipsPlaced || isSubmittingReady || hasSubmittedReady}
+                  className={`mt-2 w-full rounded-lg px-3 py-2 text-xs font-semibold text-black transition md:text-sm ${
+                    allShipsPlaced && !hasSubmittedReady
                       ? 'bg-emerald-400 hover:bg-emerald-300 animate-pulse'
                       : 'bg-white/70 disabled:cursor-not-allowed'
                   }`}
                 >
-                  Placement termine
+                  {isSubmittingReady
+                    ? 'Validation...'
+                    : hasSubmittedReady
+                      ? 'Placement valide - en attente'
+                      : 'Placement termine'}
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px,1fr]">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <h2 className="mb-3 text-lg font-semibold text-white">Flotte</h2>
-                <div className="space-y-2">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[250px,1fr]">
+              <div className="min-h-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <h2 className="mb-2 text-base font-semibold text-white">Flotte</h2>
+                <div className="space-y-1.5">
                   {FLEET.map((ship) => {
                     const isPlaced = Boolean(shipsById[ship.id])
                     const isSelected = selectedShipId === ship.id
 
                     return (
-                      <button
+                      <div
                         key={ship.id}
-                        type="button"
-                        onClick={() => setSelectedShipId(ship.id)}
-                        className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition ${
+                        className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition md:text-sm ${
                           isSelected
                             ? 'border-cyan-300/60 bg-cyan-300/10 text-white'
                             : 'border-white/10 bg-black/30 text-white/80 hover:bg-white/5'
                         }`}
                       >
-                        <p className="font-medium">{ship.label}</p>
-                        <p className="text-xs text-white/55">Taille: {ship.size}</p>
-                        <p className={`mt-1 text-xs ${isPlaced ? 'text-emerald-300' : 'text-amber-200'}`}>
-                          {isPlaced ? 'Place' : 'A placer'}
-                        </p>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedShipId(ship.id)}
+                          className="w-full text-left"
+                        >
+                          <p className="font-medium">{ship.label}</p>
+                          <p className="text-xs text-white/55">Taille: {ship.size}</p>
+                          <p className={`mt-1 text-xs ${isPlaced ? 'text-emerald-300' : 'text-amber-200'}`}>
+                            {isPlaced ? 'Place' : 'A placer'}
+                          </p>
+                        </button>
+
+                        {isPlaced ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveShip(ship.id)}
+                            className="mt-2 w-full rounded-md border border-rose-300/30 bg-rose-500/10 px-2 py-1 text-left text-[11px] text-rose-100 transition hover:bg-rose-500/20"
+                          >
+                            Retirer ce bateau
+                          </button>
+                        ) : null}
+                      </div>
                     )
                   })}
                 </div>
-
-                <div className="mt-4 space-y-2">
-                  {Object.values(shipsById).map((ship) => (
-                    <button
-                      key={`remove-${ship.id}`}
-                      type="button"
-                      onClick={() => handleRemoveShip(ship.id)}
-                      className="w-full rounded-lg border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:bg-rose-500/20"
-                    >
-                      Retirer {ship.label}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <h2 className="mb-3 text-lg font-semibold text-white">Grille (10x10)</h2>
+              <div className="flex min-h-0 flex-col rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <h2 className="mb-2 text-base font-semibold text-white">Grille (10x10)</h2>
 
-                <div className="grid w-full max-w-[560px] grid-cols-10 gap-1">
+                <div className="grid w-full max-w-[480px] grid-cols-10 gap-1 self-center md:max-w-[520px]">
                   {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, index) => {
                     const row = Math.floor(index / GRID_SIZE)
                     const column = index % GRID_SIZE
@@ -225,7 +330,7 @@ function ShipPlacementPage({ lobby, hostName, onGoBack }) {
                         key={key}
                         type="button"
                         onClick={() => handlePlaceShip(row, column)}
-                        className={`aspect-square rounded-[6px] border text-[10px] transition ${
+                        className={`aspect-square rounded-[5px] border text-[9px] transition ${
                           shipId
                             ? 'border-cyan-200/70 bg-cyan-300/35 text-white'
                             : 'border-white/15 bg-black/30 text-white/25 hover:bg-white/10'
@@ -239,11 +344,19 @@ function ShipPlacementPage({ lobby, hostName, onGoBack }) {
                 </div>
 
                 {placementError ? (
-                  <p className="mt-4 rounded-lg border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                  <p className="mt-3 rounded-lg border border-rose-300/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100 md:text-sm">
                     {placementError}
                   </p>
+                ) : syncError ? (
+                  <p className="mt-3 rounded-lg border border-amber-300/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 md:text-sm">
+                    {syncError}
+                  </p>
+                ) : hasSubmittedReady ? (
+                  <p className="mt-3 rounded-lg border border-emerald-300/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100 md:text-sm">
+                    Placement envoye. En attente de l'autre joueur...
+                  </p>
                 ) : (
-                  <p className="mt-4 text-sm text-white/65">
+                  <p className="mt-3 text-xs text-white/65 md:text-sm">
                     Bateau selectionne: {selectedShip?.label || 'Aucun'} ({orientation})
                   </p>
                 )}

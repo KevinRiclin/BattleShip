@@ -96,7 +96,7 @@ function JoinedLobbyPage({ lobby, playerName, onGoBack, onStartPlacement }) {
                   </p>
                   <p>
                     <span className="text-white/50">Joueurs:</span>{' '}
-                    <span className="text-white">{liveLobby.players.length}</span>
+                    <span className="text-white">{liveLobby.players.length}/2</span>
                   </p>
                 </div>
               </div>

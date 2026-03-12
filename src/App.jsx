@@ -3,6 +3,7 @@ import ProfessionalBackground from '@/components/background'
 import CreateLobbyPage from '@/components/CreateLobbyPage'
 import JoinedLobbyPage from '@/components/JoinedLobbyPage'
 import ShipPlacementPage from '@/components/ShipPlacementPage'
+import GamePage from '@/components/GamePage'
 
 function App() {
   const [screen, setScreen] = useState('landing')
@@ -13,6 +14,8 @@ function App() {
   const [joinedLobby, setJoinedLobby] = useState(null)
   const [placementLobby, setPlacementLobby] = useState(null)
   const [placementPlayerName, setPlacementPlayerName] = useState('')
+  const [gameLobby, setGameLobby] = useState(null)
+  const [gamePlayerName, setGamePlayerName] = useState('')
   const [createPlayerName, setCreatePlayerName] = useState('')
   const [createLobbyName, setCreateLobbyName] = useState('')
   const canJoinLobby = joinPlayerName.trim().length >= 3 && joinLobbyCode.trim().length >= 3
@@ -43,6 +46,12 @@ function App() {
     setScreen('ship-placement')
   }
 
+  const handleStartGame = (lobby) => {
+    setGameLobby(lobby)
+    setGamePlayerName(placementPlayerName || createPlayerName.trim() || joinPlayerName.trim())
+    setScreen('game')
+  }
+
   const handleJoinLobby = async () => {
     if (!canJoinLobby || isJoiningLobby) {
       return
@@ -66,6 +75,9 @@ function App() {
       const payload = await response.json()
 
       if (!response.ok) {
+        if (response.status === 409 || payload.code === 'LOBBY_FULL') {
+          throw new Error('Erreur: lobby full (2 joueurs max).')
+        }
         throw new Error(payload.error || 'Impossible de rejoindre ce lobby.')
       }
 
@@ -96,10 +108,15 @@ function App() {
     return (
       <ShipPlacementPage
         lobby={placementLobby}
-        hostName={placementPlayerName || createPlayerName.trim() || joinPlayerName.trim()}
+        playerName={placementPlayerName || createPlayerName.trim() || joinPlayerName.trim()}
         onGoBack={handleGoBack}
+        onGameStart={handleStartGame}
       />
     )
+  }
+
+  if (screen === 'game' && gameLobby) {
+    return <GamePage lobby={gameLobby} playerName={gamePlayerName} onGoBack={handleGoBack} />
   }
 
   if (screen === 'joined-lobby' && joinedLobby) {
