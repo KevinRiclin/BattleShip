@@ -58,6 +58,7 @@ function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
   const [syncError, setSyncError] = useState('')
   const [isSubmittingReady, setIsSubmittingReady] = useState(false)
   const [hasSubmittedReady, setHasSubmittedReady] = useState(isPlayerReady(lobby, playerName || ''))
+  const lobbyCode = liveLobby?.code || lobby?.code || ''
 
   useEffect(() => {
     setLiveLobby(lobby)
@@ -65,7 +66,7 @@ function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
   }, [lobby, playerName])
 
   useEffect(() => {
-    if (!lobby?.code) {
+    if (!lobbyCode) {
       return undefined
     }
 
@@ -73,7 +74,7 @@ function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
 
     const refreshLobby = async () => {
       try {
-        const response = await fetch(`/api/lobbies/${encodeURIComponent(lobby.code)}`)
+        const response = await fetch(`/api/lobbies/${encodeURIComponent(lobbyCode)}`)
         const payload = await response.json()
 
         if (!response.ok) {
@@ -103,7 +104,7 @@ function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
       isCancelled = true
       clearInterval(intervalId)
     }
-  }, [lobby?.code, onGameStart, playerName])
+  }, [lobbyCode, onGameStart, playerName])
 
   const occupiedCellMap = useMemo(() => {
     const map = new Map()
@@ -166,7 +167,7 @@ function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
       return
     }
 
-    if (!lobby?.code || !playerName || isSubmittingReady || hasSubmittedReady) {
+    if (!lobbyCode || !playerName || isSubmittingReady || hasSubmittedReady) {
       return
     }
 
@@ -174,7 +175,7 @@ function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
     setPlacementError('')
 
     try {
-      const response = await fetch(`/api/lobbies/${encodeURIComponent(lobby.code)}/ready`, {
+      const response = await fetch(`/api/lobbies/${encodeURIComponent(lobbyCode)}/ready`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -231,7 +232,7 @@ function ShipPlacementPage({ lobby, playerName, onGoBack, onGameStart }) {
             <div className="mb-3 grid shrink-0 grid-cols-1 gap-3 md:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <p className="text-xs uppercase tracking-wide text-white/50">Lobby</p>
-                <p className="mt-1 font-mono tracking-wider text-cyan-200">{lobby?.code || '---- ----'}</p>
+                <p className="mt-1 font-mono tracking-wider text-cyan-200">{lobbyCode || '---- ----'}</p>
                 <p className="mt-1 text-xs text-white/75 md:text-sm">Joueur: {playerName || 'Inconnu'}</p>
               </div>
 
